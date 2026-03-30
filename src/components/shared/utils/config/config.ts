@@ -1,29 +1,24 @@
 import { LocalStorageConstants, LocalStorageUtils, URLUtils } from '@deriv-com/utils';
 import { isStaging } from '../url/helpers';
 
+export const APP_ID = 131564;
+
 export const APP_IDS = {
-    LOCALHOST: 36300,
-    TMP_STAGING: 64584,
-    STAGING: 29934,
-    STAGING_BE: 29934,
-    STAGING_ME: 29934,
-    PRODUCTION: 65555,
-    PRODUCTION_BE: 65556,
-    PRODUCTION_ME: 65557,
+    LOCALHOST: APP_ID,
+    TMP_STAGING: APP_ID,
+    STAGING: APP_ID,
+    STAGING_BE: APP_ID,
+    STAGING_ME: APP_ID,
+    PRODUCTION: APP_ID,
+    PRODUCTION_BE: APP_ID,
+    PRODUCTION_ME: APP_ID,
 };
 
 export const livechat_license_id = 12049137;
 export const livechat_client_id = '66aa088aad5a414484c1fd1fa8a5ace7';
 
 export const domain_app_ids = {
-    'master.bot-standalone.pages.dev': APP_IDS.TMP_STAGING,
-    'staging-dbot.deriv.com': APP_IDS.STAGING,
-    'staging-dbot.deriv.be': APP_IDS.STAGING_BE,
-    'staging-dbot.deriv.me': APP_IDS.STAGING_ME,
-    'dbot.deriv.com': APP_IDS.PRODUCTION,
-    'dbot.deriv.be': APP_IDS.PRODUCTION_BE,
-    'dbot.deriv.me': APP_IDS.PRODUCTION_ME,
-    'bot.proedgetrade.site': 131564,
+    'bot.proedgetrade.site': APP_ID,
 };
 
 export const getCurrentProductionDomain = () =>
@@ -46,10 +41,6 @@ export const isTestLink = () => {
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);
 
 const getDefaultServerURL = () => {
-    if (isTestLink()) {
-        return 'ws.derivws.com';
-    }
-
     let active_loginid_from_url;
     const search = window.location.search;
     if (search) {
@@ -61,49 +52,23 @@ const getDefaultServerURL = () => {
     const is_real = loginid && !/^(VRT|VRW)/.test(loginid);
 
     const server = is_real ? 'green' : 'blue';
-    const server_url = `${server}.derivws.com`;
-
-    return server_url;
+    return `${server}.derivws.com`;
 };
 
 export const getDefaultAppIdAndUrl = () => {
     const server_url = getDefaultServerURL();
-
-    if (isTestLink()) {
-        return { app_id: APP_IDS.LOCALHOST, server_url };
-    }
-
-    const current_domain = getCurrentProductionDomain() ?? '';
-    const app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
-
-    return { app_id, server_url };
+    return { app_id: APP_ID, server_url };
 };
 
 export const getAppId = () => {
-    let app_id = null;
     const config_app_id = window.localStorage.getItem('config.app_id');
-    const current_domain = getCurrentProductionDomain() ?? '';
-
-    if (config_app_id) {
-        app_id = config_app_id;
-    } else if (isStaging()) {
-        app_id = APP_IDS.STAGING;
-    } else if (isTestLink()) {
-        app_id = APP_IDS.LOCALHOST;
-    } else {
-        app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
-    }
-
-    return app_id;
+    return config_app_id ? Number(config_app_id) : APP_ID;
 };
 
 export const getSocketURL = () => {
     const local_storage_server_url = window.localStorage.getItem('config.server_url');
     if (local_storage_server_url) return local_storage_server_url;
-
-    const server_url = getDefaultServerURL();
-
-    return server_url;
+    return getDefaultServerURL();
 };
 
 export const checkAndSetEndpointFromUrl = () => {
@@ -139,7 +104,6 @@ export const checkAndSetEndpointFromUrl = () => {
 export const getDebugServiceWorker = () => {
     const debug_service_worker_flag = window.localStorage.getItem('debug_service_worker');
     if (debug_service_worker_flag) return !!parseInt(debug_service_worker_flag);
-
     return false;
 };
 
@@ -147,7 +111,6 @@ export const generateOAuthURL = () => {
     const { getOauthURL } = URLUtils;
     const oauth_url = getOauthURL();
     const original_url = new URL(oauth_url);
-    const hostname = window.location.hostname;
 
     const configured_server_url = (LocalStorageUtils.getValue(LocalStorageConstants.configServerURL) ||
         localStorage.getItem('config.server_url')) as string;
@@ -161,18 +124,7 @@ export const generateOAuthURL = () => {
             : !valid_server_urls.includes(JSON.stringify(configured_server_url)))
     ) {
         original_url.hostname = configured_server_url;
-    } else if (original_url.hostname.includes('oauth.deriv.')) {
-        if (hostname.includes('.deriv.me')) {
-            original_url.hostname = 'oauth.deriv.me';
-        } else if (hostname.includes('.deriv.be')) {
-            original_url.hostname = 'oauth.deriv.be';
-        } else {
-            const current_domain = getCurrentProductionDomain();
-            if (current_domain) {
-                const domain_suffix = current_domain.replace(/^[^.]+\./, '');
-                original_url.hostname = `oauth.${domain_suffix}`;
-            }
-        }
     }
+
     return original_url.toString() || oauth_url;
 };
