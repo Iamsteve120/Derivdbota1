@@ -41,18 +41,7 @@ export const isTestLink = () => {
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);
 
 const getDefaultServerURL = () => {
-    let active_loginid_from_url;
-    const search = window.location.search;
-    if (search) {
-        const params = new URLSearchParams(document.location.search.substring(1));
-        active_loginid_from_url = params.get('acct1');
-    }
-
-    const loginid = window.localStorage.getItem('active_loginid') ?? active_loginid_from_url;
-    const is_real = loginid && !/^(VRT|VRW)/.test(loginid);
-
-    const server = is_real ? 'green' : 'blue';
-    return `${server}.derivws.com`;
+    return 'ws.derivws.com';
 };
 
 export const getDefaultAppIdAndUrl = () => {
@@ -115,7 +104,7 @@ export const generateOAuthURL = () => {
     const configured_server_url = (LocalStorageUtils.getValue(LocalStorageConstants.configServerURL) ||
         localStorage.getItem('config.server_url')) as string;
 
-    const valid_server_urls = ['green.derivws.com', 'red.derivws.com', 'blue.derivws.com', 'canary.derivws.com'];
+    const valid_server_urls = ['green.derivws.com', 'red.derivws.com', 'blue.derivws.com', 'ws.derivws.com', 'canary.derivws.com'];
 
     if (
         configured_server_url &&
