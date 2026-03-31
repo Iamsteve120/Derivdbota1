@@ -1,4 +1,5 @@
 import Cookies from 'js-cookie';
+import { useEffect, useState } from 'react';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '@/components/shared';
 import { generateDerivApiInstance } from '@/external/bot-skeleton/services/api/appId';
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
@@ -7,9 +8,6 @@ import { clearAuthData } from '@/utils/auth-utils';
 import { Callback } from '@deriv-com/auth-client';
 import { Button } from '@deriv-com/ui';
 
-/**
- * Gets the selected currency or falls back to appropriate defaults
- */
 const getSelectedCurrency = (
     tokens: Record<string, string>,
     clientAccounts: Record<string, any>,
@@ -30,7 +28,87 @@ const getSelectedCurrency = (
     return firstAccountCurrency || 'USD';
 };
 
+/** Check if URL has raw token params from EdgePro landing page */
+const hasRawTokenParams = (): boolean => {
+    const params = new URLSearchParams(window.location.search);
+    return !!(params.get('acct1') && params.get('token1'));
+};
+
+/** Handle raw token params from EdgePro cross-site auth */
+const handleRawTokenParams = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const tokens: Record<string, string> = {};
+    const accountsList: Record<string, string> = {};
+    const clientAccounts: Record<string, any> = {};
+
+    for (let i = 1; ; i++) {
+        const acct = params.get(`acct${i}`);
+        const token = params.get(`token${i}`);
+        const cur = params.get(`cur${i}`);
+        if (!acct || !token) break;
+
+        tokens[`acct${i}`] = acct;
+        tokens[`token${i}`] = token;
+        tokens[`cur${i}`] = cur || 'USD';
+
+        accountsList[acct] = token;
+        clientAccounts[acct] = {
+            loginid: acct,
+            token: token,
+            currency: cur || 'USD',
+        };
+    }
+
+    localStorage.setItem('accountsList', JSON.stringify(accountsList));
+    localStorage.setItem('clientAccounts', JSON.stringify(clientAccounts));
+
+    let is_token_set = false;
+    try {
+        const api = await generateDerivApiInstance();
+        if (api) {
+            const { authorize, error } = await api.authorize(tokens.token1);
+            api.disconnect();
+            if (!error && authorize) {
+                localStorage.setItem('callback_token', authorize.toString());
+                const firstId = authorize?.account_list?.[0]?.loginid;
+                if (firstId && clientAccounts[firstId]) {
+                    localStorage.setItem('authToken', clientAccounts[firstId].token);
+                    localStorage.setItem('active_loginid', firstId);
+                    is_token_set = true;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('EdgePro auth error:', e);
+    }
+
+    if (!is_token_set) {
+        localStorage.setItem('authToken', tokens.token1);
+        localStorage.setItem('active_loginid', tokens.acct1);
+    }
+
+    const selected_currency = getSelectedCurrency(tokens, clientAccounts, null);
+    window.location.replace(window.location.origin + `/bot/?account=${selected_currency}`);
+};
+
 const CallbackPage = () => {
+    const [isRawAuth, setIsRawAuth] = useState(false);
+
+    useEffect(() => {
+        if (hasRawTokenParams()) {
+            setIsRawAuth(true);
+            handleRawTokenParams();
+        }
+    }, []);
+
+    if (isRawAuth) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                <p>Connecting your account...</p>
+            </div>
+        );
+    }
+
     return (
         <Callback
             onSignInSuccess={async (tokens: Record<string, string>, rawState: unknown) => {
@@ -67,19 +145,13 @@ const CallbackPage = () => {
                     const { authorize, error } = await api.authorize(tokens.token1);
                     api.disconnect();
                     if (error) {
-                        // Check if the error is due to an invalid token
                         if (error.code === 'InvalidToken') {
-                            // Set is_token_set to true to prevent the app from getting stuck in loading state
                             is_token_set = true;
-
-                            // Only emit the InvalidToken event if logged_state is true
                             const { is_tmb_enabled = false } = useTMB();
                             if (Cookies.get('logged_state') === 'true' && !is_tmb_enabled) {
-                                // Emit an event that can be caught by the application to retrigger OIDC authentication
                                 globalObserver.emit('InvalidToken', { error });
                             }
                             if (Cookies.get('logged_state') === 'false') {
-                                // If the user is not logged out, we need to clear the local storage
                                 clearAuthData();
                             }
                         }
@@ -99,9 +171,7 @@ const CallbackPage = () => {
                     localStorage.setItem('authToken', tokens.token1);
                     localStorage.setItem('active_loginid', tokens.acct1);
                 }
-                // Determine the appropriate currency to use
                 const selected_currency = getSelectedCurrency(tokens, clientAccounts, state);
-
                 window.location.replace(window.location.origin + `bot/?account=${selected_currency}`);
             }}
             renderReturnButton={() => {
